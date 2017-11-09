@@ -222,7 +222,9 @@ class RandCD(CountDown):
             return alert
         
         # else: use randomized
-        self.useDetCD = False    
+        self.useDetCD = False   
+        if self.raiseAlert():
+            return True 
         while self.countItems < self.endCountItems:
             item = self.stream[self.countItems]
             self.countItems += 1
@@ -246,30 +248,31 @@ class MultiRandCD():
         self.endCountItems = endCountItems
         self.k = numSites
         self.countCondition = countCondition
-        self.numCDs = numCDs
+        self.numInstances = numCDs
         self.countMsg = 0
-        self.cd_list = []
+        self.instance_list = []
         
     def run(self):
-        halfCDs = ceil(self.numCDs/2.0)
         countTrue = 0
         self.countMsg = 0
-        if not self.cd_list:
-            for _ in xrange(self.numCDs):
-                self.cd_list.append(RandCD(self.stream, self.threshold, 
+        if not self.instance_list:
+            for _ in xrange(self.numInstances):
+                self.instance_list.append(RandCD(self.stream, self.threshold, 
                                self.eps, self.endCountItems, 
                                self.k, self.countCondition))
         else:
-            for i in xrange(self.numCDs):
-                self.cd_list[i].updateEndCountItems(self.endCountItems)
+            for i in xrange(self.numInstances):
+                self.instance_list[i].updateEndCountItems(self.endCountItems)
                 
-        for i in xrange(self.numCDs):
-            reachThresh = self.cd_list[i].center()
-            self.countMsg += self.cd_list[i].getCountMsg()
-            if self.cd_list[i].get_useDetCD():
+        for i in xrange(self.numInstances):
+            reachThresh = self.instance_list[i].center()
+            self.countMsg += self.instance_list[i].getCountMsg()
+            if self.instance_list[i].get_useDetCD():
                 return reachThresh
             if reachThresh:
-                countTrue += 1                          
+                countTrue += 1             
+    
+        halfCDs = ceil(self.numInstances/2.0)             
         if countTrue >= halfCDs:
             return True
         else:
@@ -301,7 +304,7 @@ class CountTracking(CountDown):
    
     def run(self):
         deltaCDinverse = log(self.n, 2) / (self.delta * self.epsHist)
-        numCDs = ceil(log(deltaCDinverse, 2))
+        numCDs = int(ceil(log(deltaCDinverse, 2)))
         if ((1/(self.epsCD**2) + self.k) * numCDs 
             < self.k * log(1.0/(self.epsCD**2),2)):
             self.useRandCD(numCDs)

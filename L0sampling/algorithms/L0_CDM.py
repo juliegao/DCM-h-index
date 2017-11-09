@@ -8,9 +8,7 @@ from algorithms.countDown import CountTracking, RandCD, MultiRandCD
 from util.config import SPARSITY, SIZE_WORD, C_RAND
 import copy
 from algorithms.hash_functions import my_hashxx
-from numpy import size
 from algorithms.f0 import F0_track
-from jsonschema._validators import items
 
 class L0_CDM(object):
     '''
@@ -332,34 +330,43 @@ class DistinctSampling():
         self.countItems = 0
         self.seeds = [randint(0,numDistinct) for _ in xrange(numSamples)]
         self.hash_function = my_hashxx
+        self.sample_list = [0]*numSamples
+        self.sample_dict = dict()   # sampleID: [reachThresh, CD instance]
+        self.globalMax_list = [-1]*numSamples   # global max hash
+        self.localMax_list = [[-1]*numSamples for _ in xrange(self.k)]
+        self.numInstances = int(ceil(log(1.0*numSamples/(delta*(eps**2)), 2)))
+#         boundRand = C_RAND* (1.0/(self.eps**2) - 0.5/self.eps)  
+#         boundRand *= self.numInstances
+#         print 'bound rand CD =', int(boundRand)
+#         print 'bound detCD = ', int(2*self.k*log(1.0/(eps**2),2))
+        
         # fake f0 for testing purpose,
         # to remove
-        self.sample_list = [0]*self.numSamples
-        self.sample_dict = dict()   # sampleID: [reachThresh, CD instance]
-        self.globalMax_list = [-1]*self.numSamples   # global max hash
-
-        self.numCDs = int(ceil(log(1.0/(delta*(eps**2)), 2)))
-        boundRand = C_RAND* (1.0/(self.eps**2) - 0.5/self.eps)  
-        boundRand *= self.numCDs
-        print 'bound rand CD=', int(boundRand)
         self.f0 = 0
         
     def individual_site(self, item):
-        itemID = item[1]
-        countInstance = 0
+        siteID, itemID = item
         sampleID = None
-        removedSamples = set()
+        localMax_list = self.localMax_list[siteID]
         for i in xrange(self.numSamples):
             hash_val = self.hash_function(itemID, self.seeds[i])
-            if hash_val > self.globalMax_list[i]:
-                countInstance += 1
-                self.globalMax_list[i] = hash_val
-                removedSamples.add(self.sample_list[i])
-                self.sample_list[i] = itemID  # update sample for i-th instance
-                sampleID = itemID
-        return sampleID, countInstance, removedSamples
+            if hash_val > localMax_list[i]:
+                self.countMsg += 2    # site and center exchange max item
+                localMax_list[i] = hash_val
+                if hash_val > self.globalMax_list[i]:
+                    self.globalMax_list[i] = hash_val
+                    sampleID = itemID
+                    
+                    self.sample_dict.pop(self.sample_list[i], None)
+                    self.sample_list[i] = itemID  # update sample for i-th instance
+                else:
+                    localMax_list[i] = self.globalMax_list[i]
+        return sampleID
         
     def center(self):
+        if self.raiseAlert():
+            return True
+        
         itemSet = set()
         while self.countItems < self.endCountItems:
             item = self.stream[self.countItems]
@@ -367,57 +374,23 @@ class DistinctSampling():
             itemSet.add(itemID)
             self.f0 = len(itemSet) 
             self.countItems += 1
-            sampleID, countInstance, removedSamples = self.individual_site(item)
+            sampleID = self.individual_site(item)
             # if not sampled the first time appears,
             # won't be sampled in the future no matter what instance
             if sampleID:
-                # site sends itemID to center
-                # center broadcast new max, except the one that reports
-                self.countMsg += SIZE_WORD  
-                self.countMsg += (self.k-1) * SIZE_WORD * countInstance
+#                 self.countMsg += (self.k-1) * SIZE_WORD * countInstance
                 self.sample_dict[sampleID] = [0,
                                               MultiRandCD(self.stream, self.threshCD, 
-                                                self.eps, self.numCDs, self.countItems, 
+                                                self.eps, self.numInstances, self.countItems, 
                                                 self.k, [sampleID, sampleID])
                                               ]
-                for s in removedSamples:
-                    self.sample_dict.pop(s, None)
-#                 msg, samples_res = self.trackThreshold(self.sample_list)
-#                 if self.raiseAlert(samples_res):
-#                     self.countMsg += msg
-#                     print '#samples reached threshold %s' %sum(samples_res)
-#                     print 'f0:', self.f0
-#                     return True
-#                 else:
-#                     msg, _= self.trackThreshold(removedSamples)
-#                     self.countMsg += msg
-                    
             if itemID in self.sample_dict:
                 if self.trackThreshold(itemID):
                     return True
 
-        print '>> end of stream, total samples %s' % len(self.sample_dict) 
-        return self.raiseAlert()
+        print '>> end of stream' 
+        return self.raiseAlert(True)
     
-#     def trackThreshold(self, samples):
-#         '''
-#         return a list of 0s and 1s for samples
-#         '''
-#         samples_res = []
-#         msg = 0
-#         for sampleID in set(samples):
-#             track = MultiRandCD(self.stream, self.threshCD, 
-#                                 self.eps, self.numCDs, self.countItems, 
-#                                 self.k, [sampleID, sampleID])
-#             reachThresh = track.run()
-#             msg += track.getCountMsg()
-# #                 print 'msg=',msg
-#             if reachThresh:
-#                 samples_res.append(1)
-#             else:
-#                 samples_res.append(0)
-#         return msg, samples_res
-
 
     def trackThreshold(self, itemID):
         reachThresh = self.sample_dict[itemID][0]
@@ -433,7 +406,7 @@ class DistinctSampling():
     def getCountMsg(self):
         return self.countMsg
     
-    def raiseAlert(self):
+    def raiseAlert(self, isLastRound=False):
         countSampleReach = 0
         for reach,_ in self.sample_dict.values():
             countSampleReach += reach
@@ -442,12 +415,34 @@ class DistinctSampling():
         if (countSampleReach >= self.threshold or 
             1.0 * countSampleReach * self.f0 / s >= self.threshold):
             
-            print '#samples reached threshold %s' %countSampleReach
-            print 'f0 %s, sample size %s:' %(self.f0, s)
-        
+            print '#samples reached threshold, f0: %s/%s, %s' %(
+                countSampleReach, s, self.f0)
+            
+            msgCD = []
             for _,cd in self.sample_dict.values():
-                self.countMsg += cd.getCountMsg()
+                msgCD.append(cd.getCountMsg())
+            print 'total cd cost: ', sum(msgCD)
+            if sum(msgCD):
+                print 'per sample:'
+                print msgCD
+            print 'msgs before counting:', self.countMsg
+            self.countMsg *= SIZE_WORD
+            self.countMsg += sum(msgCD)
             return True
+        
+        if isLastRound:
+            print '#samples reached threshold, f0: %s/%s, %s' %(
+                countSampleReach, s, self.f0)
+            msgCD = []
+            for _,cd in self.sample_dict.values():
+                msgCD.append(cd.getCountMsg())
+            print 'total cd cost: ', sum(msgCD)
+            if sum(msgCD):
+                print 'per sample:'
+                print msgCD
+            print 'msgs before counting:', self.countMsg
+            self.countMsg *= SIZE_WORD
+            self.countMsg += sum(msgCD)
         return False
     
     

@@ -41,14 +41,12 @@ RANGE_OF_ITEM = NUM_DISTINCT
 SPARSITY = 24
 SIZE_WORD = int(ceil(log(NUM_DISTINCT,2)))
 
-# NUM_ITEMS_SYN = 5*(10**7)
-# NUM_DISTINCT = 5*(10**6) #inverse distri paper
-
 #===============================================================================
 # directories
 #===============================================================================
 # HOME_DIR = "C:/Users/rg522/workspace/research/L0sampling/"
-HOME_DIR = "/grad/users/rg522/workspace/L0sampling"
+# HOME_DIR = "/grad/users/rg522/workspace/L0sampling"
+HOME_DIR = 'C:/Users/rg522/git/DCM-h-index'
 DATA_DIR = os.path.join(HOME_DIR, 'data')
 SYNTHETIC_DIR = os.path.join(DATA_DIR, 'synthetic')
 REAL_DIR = os.path.join(DATA_DIR, 'real')

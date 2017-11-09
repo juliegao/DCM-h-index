@@ -4,11 +4,12 @@ Created on Aug 25, 2017
 @author: Ruoyuan Gao
 '''
 import sys
+from algorithms.f0 import F0_track
 sys.path.append('/grad/users/rg522/workspace/L0sampling/L0sampling/')
 
 from util.preprocess import SyntheticData
 from util.config import NUM_DISTINCT, NUM_SITES_SYN,\
-    FILE_ANS_SYN, DELTA, EPS, FILE_SHARED_SYN, NUM_ITEMS_SYN, SPARSITY
+    FILE_ANS_SYN, DELTA, EPS, FILE_SHARED_SYN, NUM_ITEMS_SYN, SPARSITY, C_RAND
 from applications.hindex import ExpHist, L0sampling, L0ThreshMonitor
 from algorithms.L0_stream import L0
 from operator import indexOf
@@ -144,27 +145,55 @@ def test_L0_hindex():
 #                                 NUM_SITES_SYN, NUM_DISTINCT, DELTA)
 #         l0_sampler.computeErr()
 #         msg = l0_sampler.getCountMsg()
-        
+    
+    sample_size = int(ceil((3.0*log(2/DELTA, 2) / (EPS**2))))
+    numCDs = int(ceil(log(1.0*sample_size/(DELTA*(EPS**2)), 2)))
+    boundRand = C_RAND* (1.0/(EPS**2) - 0.5/EPS)
+    boundRand = int(boundRand * numCDs)
+    detBound = int(2*NUM_SITES_SYN*log(1.0/(EPS**2),2))
+    
     # fix k and eps, change n
     print 'numDistinct N=', NUM_DISTINCT
+    print 'sample size: %s' %(int(ceil((3*log(2/DELTA, 2) / (EPS**2)))))
+
     for threshold in [10,100,1000, 5000, 10**4]:
 #     for i in [10, 100, 500, 1000]:
         for i in [10,100,1000]:
             endCountItems = i * NUM_DISTINCT
             print '-----------'
             print 'numItems n=', endCountItems
+            if int((EPS**2) * threshold / (C_RAND*NUM_SITES_SYN)) <1:
+                print 'bound detCD = ', detBound
+            else:
+                print 'bound randCD =', int(boundRand)
             l0_sampler = L0ThreshMonitor(stream, EPS, endCountItems, 
                      NUM_SITES_SYN, NUM_DISTINCT, DELTA, threshold)
             l0_sampler.run()
             del l0_sampler
             print 'done.'
+            
+
+def test_f0_tracking():
+    syn_data = SyntheticData()
+    syn_data.loadFromFile(FILE_SHARED_SYN)
+    stream = syn_data.get_stream()
+    del syn_data
+    for i in [10,100,1000,10**4,10**5,10**6, 10**7]:
+        endCountItems = i
+        print '-----------'
+        print 'numItems n=', endCountItems
+        f0_track = F0_track(stream, NUM_DISTINCT, 
+                 endCountItems, NUM_SITES_SYN, DELTA, eps=0.1)
+        f0_track.run()
+        f0_track.computeErr()
 
         
 def main():
 #     test_ANS_hindex()
 #     test_L0()
 #     test_ExpCD()
-    test_L0_hindex()
+#     test_L0_hindex()
+    test_f0_tracking()
     pass
 
 

@@ -67,7 +67,7 @@ class Hindex(object):
                 N -= 1
                 
     def computeTrueHindex_CS(self):
-        print '>> compute True h-index'
+#         print '>> compute True h-index'
         N = self.n
         
         itemFreqList = [0] * (N+1)
@@ -266,7 +266,7 @@ class L0ThreshMonitor(Hindex):
         # see "streaming algorithms for measuring h-impact threorem 14"
     
     def run(self):
-        print '>> start L0 with threshold counting, sample size: %s' %self.sample_size
+#         print '>> start L0 with threshold counting'
         l0_dcm = DistinctSampling(self.stream, self.eps, 
                                   self.threshold, self.endCountItems, 
                                   self.k, self.n, self.delta, 
